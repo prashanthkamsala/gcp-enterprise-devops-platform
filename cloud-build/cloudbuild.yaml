@@ -1,0 +1,25 @@
+steps:
+  - id: "run-tests"
+    name: "python:3.12-slim"
+    dir: "application/order-api"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        pip install --no-cache-dir -r requirements-dev.txt
+        python -m pytest tests/ -v
+
+  - id: "build-image"
+    name: "gcr.io/cloud-builders/docker"
+    dir: "application/order-api"
+    args:
+      - "build"
+      - "-t"
+      - "us-east1-docker.pkg.dev/$PROJECT_ID/devops-app-images/order-api:$BUILD_ID"
+      - "."
+
+images:
+  - "us-east1-docker.pkg.dev/$PROJECT_ID/devops-app-images/order-api:$BUILD_ID"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
