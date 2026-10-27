@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: us-east1-docker.pkg.dev/project-0732a8d8-67b9-48c8-a9d/devops-app-images/order-api
+  digest: sha256:a0f5a0b4bb77726135e2092b62ca3b2aa5e15f7cfacadd17e3bdd5e8b4868c11
+  pullPolicy: IfNotPresent
+
+config:
+  environment: dev
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
