@@ -1,0 +1,69 @@
+steps:
+  - id: "helm-server-dry-run"
+    name: "gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
+    entrypoint: "bash"
+    args:
+      - "-euc"
+      - |
+        set -o pipefail
+        export DEBIAN_FRONTEND=noninteractive
+
+        echo "1. Installing GKE authentication tools..."
+
+        apt-get update -qq
+        apt-get install -y -qq ca-certificates curl gnupg tar gzip
+
+        mkdir -p /usr/share/keyrings
+
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+          | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+          > /etc/apt/sources.list.d/google-cloud-sdk.list
+
+        apt-get update -qq
+        apt-get install -y -qq \
+          kubectl \
+          google-cloud-cli-gke-gcloud-auth-plugin
+
+        echo "Verifying Kubernetes tools..."
+        kubectl version --client
+        gke-gcloud-auth-plugin --version
+
+        echo "2. Installing Helm..."
+
+        HELM_VERSION="v3.17.3"
+
+        curl -fsSLo /tmp/helm.tar.gz \
+          "https://get.helm.sh/helm-$${HELM_VERSION}-linux-amd64.tar.gz"
+
+        tar -xzf /tmp/helm.tar.gz -C /tmp
+        install /tmp/linux-amd64/helm /usr/local/bin/helm
+
+        helm version --short
+
+        echo "3. Authenticating to GKE..."
+
+        gcloud container clusters get-credentials devops-lab-gke \
+          --project="$PROJECT_ID" \
+          --zone=us-east1-b
+
+        echo "4. Linting Helm chart..."
+
+        helm lint kubernetes/helm/order-platform
+
+        echo "5. Performing server-side Helm dry run..."
+
+        helm upgrade order-api kubernetes/helm/order-platform \
+          --namespace order-platform \
+          --set-string image.digest=sha256:a8868f5062f46fe2fcfcef85cdd346fd78110b0cf6049db755ece99274be46d0 \
+          --dry-run=server \
+          --hide-secret \
+          --timeout 3m
+
+        echo "SUCCESS: Helm server-side dry run completed"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 600s

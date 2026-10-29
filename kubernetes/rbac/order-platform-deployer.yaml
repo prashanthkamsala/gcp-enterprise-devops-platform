@@ -1,0 +1,45 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: order-platform-deployer
+  namespace: order-platform
+rules:
+  # Manage the Order API application and service.
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Manage service configuration and application identity.
+  - apiGroups: [""]
+    resources:
+      - services
+      - configmaps
+      - serviceaccounts
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Helm 3 stores release records as Kubernetes Secrets.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Observe Pods and logs during rollout verification.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: order-platform-deployer-binding
+  namespace: order-platform
+subjects:
+  - kind: User
+    name: devops-cloud-deploy-sa@project-0732a8d8-67b9-48c8-a9d.iam.gserviceaccount.com
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: order-platform-deployer
+  apiGroup: rbac.authorization.k8s.io

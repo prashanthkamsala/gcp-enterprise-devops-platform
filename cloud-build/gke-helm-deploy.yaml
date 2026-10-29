@@ -1,0 +1,89 @@
+# Cloud Build: deploy an immutable Order API image to GKE.
+# Run with the dedicated deployment service account.
+
+substitutions:
+  _IMAGE_DIGEST: "sha256:a8868f5062f46fe2fcfcef85cdd346fd78110b0cf6049db755ece99274be46d0"
+
+steps:
+  - id: "deploy-order-api"
+    name: "gcr.io/google.com/cloudsdktool/google-cloud-cli:stable"
+    entrypoint: "bash"
+    args:
+      - "-euc"
+      - |
+        set -o pipefail
+        export DEBIAN_FRONTEND=noninteractive
+
+        echo "1. Installing Kubernetes tools..."
+
+        apt-get update -qq
+        apt-get install -y -qq ca-certificates curl gnupg tar gzip
+
+        mkdir -p /usr/share/keyrings
+
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list
+
+        apt-get update -qq
+        apt-get install -y -qq kubectl google-cloud-cli-gke-gcloud-auth-plugin
+
+        kubectl version --client
+        gke-gcloud-auth-plugin --version
+
+        echo "2. Installing Helm..."
+
+        curl -fsSLo /tmp/helm.tar.gz https://get.helm.sh/helm-v3.17.3-linux-amd64.tar.gz
+
+        tar -xzf /tmp/helm.tar.gz -C /tmp
+        install /tmp/linux-amd64/helm /usr/local/bin/helm
+
+        helm version --short
+
+        echo "3. Validating image digest..."
+
+        IMAGE_DIGEST="${_IMAGE_DIGEST}"
+
+        if ! [[ "$${IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+          echo "ERROR: Invalid image digest"
+          exit 1
+        fi
+
+        echo "4. Connecting to GKE..."
+
+        gcloud container clusters get-credentials devops-lab-gke --project="$PROJECT_ID" --zone=us-east1-b
+
+        echo "5. Validating Helm chart..."
+
+        helm lint kubernetes/helm/order-platform
+
+        echo "6. Upgrading Order API..."
+
+        helm upgrade order-api kubernetes/helm/order-platform --namespace order-platform --set-string image.digest="$${IMAGE_DIGEST}" --atomic --wait --timeout 5m
+
+        echo "7. Verifying Kubernetes rollout..."
+
+        kubectl rollout status deployment/order-api --namespace order-platform --timeout=180s
+
+        echo "8. Checking deployed image digest..."
+
+        ACTUAL_IMAGE=$$(kubectl get deployment order-api --namespace order-platform -o jsonpath='{.spec.template.spec.containers[0].image}')
+
+        echo "Deployed image: $${ACTUAL_IMAGE}"
+
+        case "$${ACTUAL_IMAGE}" in
+          *@$${IMAGE_DIGEST})
+            echo "SUCCESS: Deployment digest verified"
+            ;;
+          *)
+            echo "ERROR: Deployment digest mismatch"
+            exit 1
+            ;;
+        esac
+
+        echo "SUCCESS: Cloud Build GKE deployment completed"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 900s
