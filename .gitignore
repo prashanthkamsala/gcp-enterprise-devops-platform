@@ -29,3 +29,6 @@ override.tf.json
 .idea/
 .vscode/
 tfplan
+
+# Terraform saved execution plans
+*.tfplan
